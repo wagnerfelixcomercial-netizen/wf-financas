@@ -43,16 +43,14 @@ export function Overview({ transactions, onEdit, onDelete, onTogglePaid }: Overv
 
   const PIE_COLORS = ['#6C5CE7', '#00B894', '#E17055', '#FDCB6E', '#0984E3', '#A29BFE', '#00CEC9', '#FD79A8'];
 
-  // Função inteligente para exclusão com suporte a lote (parcelas/recorrentes)
   const handleDeleteClick = (t: Transaction) => {
     if (!onDelete) return;
     
-    // Se for parcela ou recorrente, pergunta se quer apagar todos os futuros
     if (t.frequency === 'installment' || t.frequency === 'recurring') {
       const option = window.confirm(
         `Este é um item recorrente/parcelado.\n\nClique em [OK] para apagar ESTE E TODOS OS FUTUROS/RESTANTES.\nClique em [Cancelar] para apagar APENAS ESTE MÊS.`
       );
-      onDelete(t.id, option); // true para todos os futuros, false para apenas este
+      onDelete(t.id, option);
     } else {
       if (window.confirm('Excluir este lançamento?')) {
         onDelete(t.id, false);
@@ -141,8 +139,8 @@ export function Overview({ transactions, onEdit, onDelete, onTogglePaid }: Overv
         ) : (
           <div className="space-y-2">
             {transactions.slice(0, 8).map((t) => {
-              // Verifica se a transação está paga (suporta propriedades comuns como is_paid ou status)
-              const isPaid = (t as any).is_paid !== false; // assume pago por padrão se não especificado
+              // Corrigido: Agora só é pago se for explicitamente true, caso contrário fica Pendente
+              const isPaid = (t as any).is_paid === true;
 
               return (
                 <div key={t.id} className="flex items-center justify-between rounded-lg px-3 py-2.5 transition hover:bg-[#0B0E14]">
@@ -153,7 +151,6 @@ export function Overview({ transactions, onEdit, onDelete, onTogglePaid }: Overv
                     <div>
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium text-white">{t.description}</p>
-                        {/* Indicador visual rápido de pago */}
                         <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${isPaid ? 'bg-green-500/10 text-green-400' : 'bg-amber-500/10 text-amber-400'}`}>
                           {isPaid ? 'Pago' : 'Pendente'}
                         </span>
@@ -167,21 +164,23 @@ export function Overview({ transactions, onEdit, onDelete, onTogglePaid }: Overv
                       {t.type === 'income' ? '+' : '-'}{formatCurrency(Number(t.amount))}
                     </span>
                     <div className="flex items-center gap-1">
-                      {/* Botão Rápido de Pago / Pendente */}
+                      {/* Botão de alternar com type="button" garantindo o clique */}
                       {onTogglePaid && (
                         <button
+                          type="button"
                           onClick={() => onTogglePaid(t)}
-                          className={`rounded p-1 transition hover:bg-slate-800 ${isPaid ? 'text-green-400' : 'text-slate-500 hover:text-green-400'}`}
+                          className={`rounded p-1.5 transition hover:bg-slate-800 ${isPaid ? 'text-green-400' : 'text-slate-500 hover:text-green-400'}`}
                           title={isPaid ? 'Marcar como Pendente' : 'Marcar como Pago'}
                         >
-                          {isPaid ? <CheckCircle size={16} /> : <Clock size={16} />}
+                          {isPaid ? <CheckCircle size={18} /> : <Clock size={18} />}
                         </button>
                       )}
 
                       {onEdit && (
                         <button
+                          type="button"
                           onClick={() => onEdit(t)}
-                          className="rounded p-1 text-slate-400 transition hover:bg-slate-800 hover:text-white"
+                          className="rounded p-1.5 text-slate-400 transition hover:bg-slate-800 hover:text-white"
                           title="Editar"
                         >
                           <Edit2 size={16} />
@@ -190,8 +189,9 @@ export function Overview({ transactions, onEdit, onDelete, onTogglePaid }: Overv
                       
                       {onDelete && (
                         <button
+                          type="button"
                           onClick={() => handleDeleteClick(t)}
-                          className="rounded p-1 text-slate-400 transition hover:bg-slate-800 hover:text-red-400"
+                          className="rounded p-1.5 text-slate-400 transition hover:bg-slate-800 hover:text-red-400"
                           title="Excluir"
                         >
                           <Trash2 size={16} />
