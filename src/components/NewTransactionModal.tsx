@@ -42,6 +42,7 @@ export function NewTransactionModal({ open, onClose, onSave, categories, editDat
   const [date, setDate] = useState(toISODate(new Date()));
   const [frequency, setFrequency] = useState<Frequency>('single');
   const [installmentTotal, setInstallmentTotal] = useState('1');
+  const [currentInstallmentNumber, setCurrentInstallmentNumber] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,6 +58,8 @@ export function NewTransactionModal({ open, onClose, onSave, categories, editDat
         setDate(editData.transaction_date || toISODate(new Date()));
         setFrequency(editData.frequency || 'single');
         setInstallmentTotal(editData.installment_total ? String(editData.installment_total) : '1');
+        // Preserva o número atual da parcela (ex: 2 de 10) para não resetar ao editar
+        setCurrentInstallmentNumber(editData.installment_number || null);
       } else {
         // Limpa os campos quando for um novo lançamento
         setDescription('');
@@ -67,6 +70,7 @@ export function NewTransactionModal({ open, onClose, onSave, categories, editDat
         setDate(toISODate(new Date()));
         setFrequency('single');
         setInstallmentTotal('1');
+        setCurrentInstallmentNumber(null);
       }
       setError(null);
     }
@@ -84,6 +88,12 @@ export function NewTransactionModal({ open, onClose, onSave, categories, editDat
     }
 
     setLoading(true);
+    
+    // Se for edição, mantém o installment_number original (ex: 2). Se for novo, começa em 1.
+    const finalInstallmentNumber = editData 
+      ? currentInstallmentNumber 
+      : (frequency === 'installment' ? 1 : null);
+
     const ok = await onSave({
       description: description.trim(),
       amount: amt,
@@ -92,7 +102,7 @@ export function NewTransactionModal({ open, onClose, onSave, categories, editDat
       account,
       transaction_date: date,
       frequency,
-      installment_number: frequency === 'installment' ? 1 : null,
+      installment_number: finalInstallmentNumber,
       installment_total: frequency === 'installment' ? parseInt(installmentTotal) || 1 : null,
     });
     setLoading(false);
@@ -210,7 +220,7 @@ export function NewTransactionModal({ open, onClose, onSave, categories, editDat
           </div>
 
           {frequency === 'installment' && (
-            <Field icon={<Split size={16} />} label="Total de parcelas">
+            <Field icon={<Split size={16} />} label={editData && currentInstallmentNumber ? `Parcela atual: ${currentInstallmentNumber} (Total de parcelas)` : 'Total de parcelas'}>
               <input
                 type="number"
                 min="1"
@@ -220,7 +230,9 @@ export function NewTransactionModal({ open, onClose, onSave, categories, editDat
                 className="input-field"
               />
               <p className="mt-1 text-xs text-slate-500">
-                Será lançado como 1/{installmentTotal} e os próximos meses gerados automaticamente.
+                {editData && currentInstallmentNumber 
+                  ? `Editando a parcela ${currentInstallmentNumber} de ${installmentTotal}. O número da parcela será preservado.`
+                  : `Será lançado como 1/${installmentTotal} e os próximos meses gerados automaticamente.`}
               </p>
             </Field>
           )}

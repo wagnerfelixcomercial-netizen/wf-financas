@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { TrendingUp, TrendingDown, Wallet, PiggyBank, ArrowUpRight, ArrowDownRight, Edit2, Trash2 } from 'lucide-react';
+import { TrendingUp, TrendingDown, Wallet, PiggyBank, ArrowUpRight, ArrowDownRight, Edit2, Trash2, CheckCircle, Clock } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell, Legend } from 'recharts';
 import type { Transaction } from '@/lib/types';
 import { formatCurrency, formatDate } from '@/lib/format';
@@ -7,10 +7,11 @@ import { formatCurrency, formatDate } from '@/lib/format';
 interface OverviewProps {
   transactions: Transaction[];
   onEdit?: (transaction: Transaction) => void;
-  onDelete?: (id: string) => void;
+  onDelete?: (id: string, deleteAllFuture?: boolean) => void;
+  onTogglePaid?: (transaction: Transaction) => void;
 }
 
-export function Overview({ transactions, onEdit, onDelete }: OverviewProps) {
+export function Overview({ transactions, onEdit, onDelete, onTogglePaid }: OverviewProps) {
   const { totalIncome, totalExpense, freeMoney, savingsRate, byCategory, flowData } = useMemo(() => {
     let totalIncome = 0;
     let totalExpense = 0;
@@ -41,6 +42,23 @@ export function Overview({ transactions, onEdit, onDelete }: OverviewProps) {
   }, [transactions]);
 
   const PIE_COLORS = ['#6C5CE7', '#00B894', '#E17055', '#FDCB6E', '#0984E3', '#A29BFE', '#00CEC9', '#FD79A8'];
+
+  // Função inteligente para exclusão com suporte a lote (parcelas/recorrentes)
+  const handleDeleteClick = (t: Transaction) => {
+    if (!onDelete) return;
+    
+    // Se for parcela ou recorrente, pergunta se quer apagar todos os futuros
+    if (t.frequency === 'installment' || t.frequency === 'recurring') {
+      const option = window.confirm(
+        `Este é um item recorrente/parcelado.\n\nClique em [OK] para apagar ESTE E TODOS OS FUTUROS/RESTANTES.\nClique em [Cancelar] para apagar APENAS ESTE MÊS.`
+      );
+      onDelete(t.id, option); // true para todos os futuros, false para apenas este
+    } else {
+      if (window.confirm('Excluir este lançamento?')) {
+        onDelete(t.id, false);
+      }
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -122,45 +140,68 @@ export function Overview({ transactions, onEdit, onDelete }: OverviewProps) {
           <p className="py-8 text-center text-slate-500">Nenhum lançamento neste mês ainda.</p>
         ) : (
           <div className="space-y-2">
-            {transactions.slice(0, 8).map((t) => (
-              <div key={t.id} className="flex items-center justify-between rounded-lg px-3 py-2.5 transition hover:bg-[#0B0E14]">
-                <div className="flex items-center gap-3">
-                  <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${t.type === 'income' ? 'bg-green-500/10' : 'bg-red-500/10'}`}>
-                    {t.type === 'income' ? <ArrowUpRight className="text-green-400" size={18} /> : <ArrowDownRight className="text-red-400" size={18} />}
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-white">{t.description}</p>
-                    <p className="text-xs text-slate-500">{t.category} · {formatDate(t.transaction_date)}{t.installment_total ? ` · ${t.installment_number}/${t.installment_total}` : ''}</p>
-                  </div>
-                </div>
+            {transactions.slice(0, 8).map((t) => {
+              // Verifica se a transação está paga (suporta propriedades comuns como is_paid ou status)
+              const isPaid = (t as any).is_paid !== false; // assume pago por padrão se não especificado
 
-                <div className="flex items-center gap-4">
-                  <span className={`text-sm font-semibold ${t.type === 'income' ? 'text-green-400' : 'text-red-400'}`}>
-                    {t.type === 'income' ? '+' : '-'}{formatCurrency(Number(t.amount))}
-                  </span>
-                  <div className="flex items-center gap-1">
-                    {onEdit && (
-                      <button
-                        onClick={() => onEdit(t)}
-                        className="rounded p-1 text-slate-400 transition hover:bg-slate-800 hover:text-white"
-                        title="Editar"
-                      >
-                        <Edit2 size={16} />
-                      </button>
-                    )}
-                    {onDelete && (
-                      <button
-                        onClick={() => onDelete(t.id)}
-                        className="rounded p-1 text-slate-400 transition hover:bg-slate-800 hover:text-red-400"
-                        title="Excluir"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    )}
+              return (
+                <div key={t.id} className="flex items-center justify-between rounded-lg px-3 py-2.5 transition hover:bg-[#0B0E14]">
+                  <div className="flex items-center gap-3">
+                    <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${t.type === 'income' ? 'bg-green-500/10' : 'bg-red-500/10'}`}>
+                      {t.type === 'income' ? <ArrowUpRight className="text-green-400" size={18} /> : <ArrowDownRight className="text-red-400" size={18} />}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-white">{t.description}</p>
+                        {/* Indicador visual rápido de pago */}
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${isPaid ? 'bg-green-500/10 text-green-400' : 'bg-amber-500/10 text-amber-400'}`}>
+                          {isPaid ? 'Pago' : 'Pendente'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500">{t.category} · {formatDate(t.transaction_date)}{t.installment_total ? ` · ${t.installment_number}/${t.installment_total}` : ''}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-4">
+                    <span className={`text-sm font-semibold ${t.type === 'income' ? 'text-green-400' : 'text-red-400'}`}>
+                      {t.type === 'income' ? '+' : '-'}{formatCurrency(Number(t.amount))}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      {/* Botão Rápido de Pago / Pendente */}
+                      {onTogglePaid && (
+                        <button
+                          onClick={() => onTogglePaid(t)}
+                          className={`rounded p-1 transition hover:bg-slate-800 ${isPaid ? 'text-green-400' : 'text-slate-500 hover:text-green-400'}`}
+                          title={isPaid ? 'Marcar como Pendente' : 'Marcar como Pago'}
+                        >
+                          {isPaid ? <CheckCircle size={16} /> : <Clock size={16} />}
+                        </button>
+                      )}
+
+                      {onEdit && (
+                        <button
+                          onClick={() => onEdit(t)}
+                          className="rounded p-1 text-slate-400 transition hover:bg-slate-800 hover:text-white"
+                          title="Editar"
+                        >
+                          <Edit2 size={16} />
+                        </button>
+                      )}
+                      
+                      {onDelete && (
+                        <button
+                          onClick={() => handleDeleteClick(t)}
+                          className="rounded p-1 text-slate-400 transition hover:bg-slate-800 hover:text-red-400"
+                          title="Excluir"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

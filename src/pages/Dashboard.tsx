@@ -80,10 +80,15 @@ export function Dashboard() {
     return await createTransaction(tx);
   };
 
-  const handleDeleteTx = async (id: string) => {
-    if (confirm('Excluir este lançamento?')) {
-      await deleteTransaction(id);
-    }
+  // Função de exclusão otimizada para lote / futuros
+  const handleDeleteTx = async (id: string, deleteAllFuture?: boolean) => {
+    await deleteTransaction(id, deleteAllFuture);
+  };
+
+  // Função para marcar como pago ou pendente num clique
+  const handleTogglePaid = async (tx: Transaction) => {
+    const currentPaid = (tx as any).is_paid !== false;
+    await updateTransaction(tx.id, { is_paid: !currentPaid } as any);
   };
 
   // Pending approval screen
@@ -217,10 +222,16 @@ export function Dashboard() {
                   transactions={transactions} 
                   onEdit={openEditTx} 
                   onDelete={handleDeleteTx} 
+                  onTogglePaid={handleTogglePaid}
                 />
               )}
               {activeTab === 'transactions' && (
-                <TransactionsList transactions={transactions} onEdit={openEditTx} onDelete={handleDeleteTx} />
+                <TransactionsList 
+                  transactions={transactions} 
+                  onEdit={openEditTx} 
+                  onDelete={handleDeleteTx} 
+                  onTogglePaid={handleTogglePaid}
+                />
               )}
               {activeTab === 'cards' && <CardsPage cards={cards} onReload={loadData} />}
               {activeTab === 'goals' && <GoalsPage goals={goals} onReload={loadData} />}
@@ -238,7 +249,7 @@ export function Dashboard() {
         open={txModalOpen}
         onClose={() => {
           setTxModalOpen(false);
-          setEditTx(null); // Garante a limpeza do estado ao fechar
+          setEditTx(null);
         }}
         onSave={handleSaveTx}
         categories={categories as Category[]}
