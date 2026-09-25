@@ -50,6 +50,8 @@ export function useFinanceData(selectedMonth: string) {
 
   const createTransaction = async (tx: Omit<Transaction, 'id' | 'user_id' | 'created_at'>): Promise<boolean> => {
     if (!user) return false;
+
+    // 1. Inserir a transação principal (ou a primeira parcela)
     const { data, error } = await supabase
       .from('transactions')
       .insert({
@@ -68,7 +70,7 @@ export function useFinanceData(selectedMonth: string) {
 
     if (error || !data) return false;
 
-    // Generate recurring/installment rows
+    // 2. Se for Recorrente (Fixa), gera automaticamente para os próximos 11 meses
     if (tx.frequency === 'recurring') {
       const baseDate = new Date(tx.transaction_date + 'T00:00:00');
       const rows: Record<string, unknown>[] = [];
@@ -86,13 +88,15 @@ export function useFinanceData(selectedMonth: string) {
         });
       }
       if (rows.length) await supabase.from('transactions').insert(rows);
-    } else if (tx.frequency === 'installment' && tx.installment_total) {
+    } 
+    // 3. Se for Parcelada (caso venha por aqui sem passar pelo Dashboard)
+    else if (tx.frequency === 'installment' && tx.installment_total && tx.installment_total > 1) {
       const baseDate = new Date(tx.transaction_date + 'T00:00:00');
       const total = tx.installment_total;
       const rows: Record<string, unknown>[] = [];
       for (let i = 2; i <= total; i++) {
         rows.push({
-          description: tx.description,
+          description: `${tx.description.replace(/ \(\d+\/\d+\)$/, '')} (${i}/${total})`,
           amount: tx.amount,
           type: tx.type,
           category: tx.category,

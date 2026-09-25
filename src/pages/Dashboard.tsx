@@ -1,11 +1,12 @@
 import { useState, useMemo } from 'react';
 import {
   LayoutDashboard, CreditCard, PiggyBank, Repeat, BarChart3, Settings,
-  Plus, ChevronLeft, ChevronRight, Wallet, LogOut, Users, Menu, X, ShieldAlert
+  Plus, ChevronLeft, ChevronRight, Wallet, LogOut, Users, X, ShieldAlert
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useFinanceData } from '@/hooks/useFinanceData';
 import { monthKey, parseMonthKey, addMonths, formatMonthYear } from '@/lib/format';
+import { supabase } from '@/lib/supabase';
 import { Overview } from '@/pages/Overview';
 import { TransactionsList } from '@/pages/TransactionsList';
 import { CardsPage } from '@/pages/CardsPage';
@@ -31,7 +32,7 @@ export function Dashboard() {
 
   const {
     transactions, goals, cards, subscriptions, categories, loading,
-    loadData, createTransaction, updateTransaction, deleteTransaction,
+    createTransaction, updateTransaction, deleteTransaction, loadData
   } = useFinanceData(selectedMonth);
 
   const monthDate = useMemo(() => parseMonthKey(selectedMonth), [selectedMonth]);
@@ -77,30 +78,51 @@ export function Dashboard() {
     if (editTx) {
       return await updateTransaction(editTx.id, tx);
     }
+
     return await createTransaction(tx);
   };
 
-  const handleDeleteTx = async (id: string, deleteAllFuture?: boolean) => {
-    await deleteTransaction(id, deleteAllFuture);
-  };
-
-  // CORRIGIDO: Alterna o status no banco considerando variações de nome e força recarga imediata
-  const handleTogglePaid = async (tx: Transaction) => {
-    const currentPaid = (tx as any).is_paid === true || (tx as any).paid === true;
-    const newStatus = !currentPaid;
-
-    const { error } = await updateTransaction(tx.id, {
-      is_paid: newStatus,
-      paid: newStatus,
-    } as any);
-
-    if (error) {
-      console.error('Erro ao atualizar status de pagamento:', error);
-    } else {
-      await loadData();
+  const handleDeleteTx = async (id: string) => {
+    if (confirm('Excluir este lançamento?')) {
+      await deleteTransaction(id);
     }
   };
 
+  const handleTogglePaid = async (tx: Transaction) => {
+    const currentStatus = (tx as any).is_paid === true;
+    await updateTransaction(tx.id, { is_paid: !currentStatus } as any);
+  };
+
+  const handleDeleteWithFuture = async (id: string, deleteAllFuture?: boolean) => {
+    if (!deleteAllFuture) {
+      if (confirm('Excluir este lançamento?')) {
+        await deleteTransaction(id);
+      }
+      return;
+    }
+
+    const txToDelete = transactions.find((t) => t.id === id);
+    if (!txToDelete) {
+      await deleteTransaction(id);
+      return;
+    }
+
+    if (confirm('Deseja realmente excluir este e todos os lançamentos futuros/restantes relacionados?')) {
+      const cleanDescription = txToDelete.description.replace(/ \(\d+\/\d+\)$/, '');
+      const { error } = await supabase
+        .from('transactions')
+        .delete()
+        .eq('user_id', user?.id)
+        .ilike('description', `${cleanDescription}%`)
+        .gte('transaction_date', txToDelete.transaction_date);
+
+      if (!error) {
+        loadData();
+      }
+    }
+  };
+
+  // Pending approval screen
   if (!isApproved && !isAdmin) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#0B0E14] p-6">
@@ -111,6 +133,7 @@ export function Dashboard() {
           <h1 className="mb-3 text-2xl font-bold text-white">Conta em análise</h1>
           <p className="mb-6 text-slate-400">
             Olá {profile?.full_name || 'usuário'}! Sua conta foi criada com sucesso e está aguardando aprovação do administrador.
+            Você receberá acesso em breve.
           </p>
           <button
             onClick={signOut}
@@ -125,10 +148,12 @@ export function Dashboard() {
 
   return (
     <div className="min-h-screen bg-[#0B0E14]">
+      {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div className="fixed inset-0 z-40 bg-black/60 lg:hidden" onClick={() => setSidebarOpen(false)} />
       )}
 
+      {/* Sidebar */}
       <aside className={`fixed left-0 top-0 z-50 h-full w-64 transform border-r border-slate-800 bg-[#121824] transition-transform lg:translate-x-0 ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full'
       }`}>
@@ -183,12 +208,16 @@ export function Dashboard() {
         </div>
       </aside>
 
+      {/* Main content */}
       <div className="lg:ml-64">
+        {/* Top bar */}
         <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-800 glass px-4 sm:px-6">
           <div className="flex items-center gap-3">
             <button onClick={() => setSidebarOpen(true)} className="text-slate-400 lg:hidden">
-              <Menu size={22} />
+              <span className="sr-only">Abrir Menu</span>
+              <Wallet size={22} />
             </button>
+            {/* Month selector */}
             <div className="flex items-center gap-2 rounded-lg border border-slate-700 bg-[#121824] px-3 py-2">
               <button onClick={handlePrevMonth} className="text-slate-400 hover:text-white">
                 <ChevronLeft size={18} />
@@ -212,6 +241,7 @@ export function Dashboard() {
           </button>
         </header>
 
+        {/* Page content */}
         <main className="p-4 sm:p-6 lg:p-8 animate-fade-in">
           {loading && activeTab === 'overview' ? (
             <div className="flex h-64 items-center justify-center">
@@ -220,20 +250,15 @@ export function Dashboard() {
           ) : (
             <>
               {activeTab === 'overview' && (
-                <Overview 
-                  transactions={transactions} 
-                  onEdit={openEditTx} 
-                  onDelete={handleDeleteTx} 
+                <Overview
+                  transactions={transactions}
+                  onEdit={openEditTx}
+                  onDelete={handleDeleteWithFuture}
                   onTogglePaid={handleTogglePaid}
                 />
               )}
               {activeTab === 'transactions' && (
-                <TransactionsList 
-                  transactions={transactions} 
-                  onEdit={openEditTx} 
-                  onDelete={handleDeleteTx} 
-                  onTogglePaid={handleTogglePaid}
-                />
+                <TransactionsList transactions={transactions} onEdit={openEditTx} onDelete={handleDeleteTx} />
               )}
               {activeTab === 'cards' && <CardsPage cards={cards} onReload={loadData} />}
               {activeTab === 'goals' && <GoalsPage goals={goals} onReload={loadData} />}
@@ -246,12 +271,10 @@ export function Dashboard() {
         </main>
       </div>
 
+      {/* New transaction modal */}
       <NewTransactionModal
         open={txModalOpen}
-        onClose={() => {
-          setTxModalOpen(false);
-          setEditTx(null);
-        }}
+        onClose={() => setTxModalOpen(false)}
         onSave={handleSaveTx}
         categories={categories as Category[]}
         editData={editTx ? {
@@ -268,6 +291,7 @@ export function Dashboard() {
         } : null}
       />
 
+      {/* AI Chat Widget */}
       <AIChatWidget
         transactions={transactions}
         selectedMonth={selectedMonth}

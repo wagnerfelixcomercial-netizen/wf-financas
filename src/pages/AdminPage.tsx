@@ -27,7 +27,7 @@ export function AdminPage() {
   };
 
   const toggleBlock = async (p: Profile) => {
-    await supabase.from('profiles').update({ is_blocked: !p.is_blocked, updated_at: new Date().toISOString() }).eq('id', p);
+    await supabase.from('profiles').update({ is_blocked: !p.is_blocked, updated_at: new Date().toISOString() }).eq('id', p.id);
     load();
   };
 

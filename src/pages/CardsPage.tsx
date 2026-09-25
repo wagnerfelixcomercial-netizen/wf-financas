@@ -18,6 +18,7 @@ export function CardsPage({ cards, onReload }: CardsPageProps) {
   const [creditLimit, setCreditLimit] = useState('');
   const [usedAmount, setUsedAmount] = useState('');
   const [dueDay, setDueDay] = useState('10');
+  const [closingDay, setClosingDay] = useState('5'); // <-- Novo campo para o dia de fecho
   const [color, setColor] = useState('#6C5CE7');
   const [loading, setLoading] = useState(false);
 
@@ -29,18 +30,20 @@ export function CardsPage({ cards, onReload }: CardsPageProps) {
     setCreditLimit('');
     setUsedAmount('');
     setDueDay('10');
+    setClosingDay('5');
     setColor('#6C5CE7');
     setModalOpen(true);
   };
 
-  const openEdit = (c: Card) => {
+  const openEdit = (c: any) => {
     setEditId(c.id);
     setName(c.name);
     setBank(c.bank);
     setLastFour(c.last_four);
-    setCreditLimit(String(c.credit_limit));
+    setCreditLimit(String(c.limit_amount ?? c.credit_limit ?? ''));
     setUsedAmount(String(c.used_amount));
     setDueDay(String(c.due_day));
+    setClosingDay(String(c.closing_day ?? '5'));
     setColor(c.color);
     setModalOpen(true);
   };
@@ -48,23 +51,46 @@ export function CardsPage({ cards, onReload }: CardsPageProps) {
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      alert('Sessão expirada. Faça login novamente.');
+      setLoading(false);
+      return;
+    }
+
     const payload = {
+      user_id: user.id,
       name,
       bank,
       last_four: lastFour || '0000',
-      credit_limit: parseFloat(creditLimit) || 0,
+      limit_amount: parseFloat(creditLimit) || 0,
       used_amount: parseFloat(usedAmount) || 0,
       due_day: parseInt(dueDay) || 10,
+      closing_day: parseInt(closingDay) || 5, // <-- Adicionado ao payload
       color,
     };
+
+    let error = null;
+
     if (editId) {
-      await supabase.from('cards').update(payload).eq('id', editId);
+      const res = await supabase.from('cards').update(payload).eq('id', editId);
+      error = res.error;
     } else {
-      await supabase.from('cards').insert(payload);
+      const res = await supabase.from('cards').insert([payload]);
+      error = res.error;
     }
+
+    if (error) {
+      console.error('Erro ao salvar cartão no Supabase:', error.message);
+      alert(`Erro ao salvar cartão: ${error.message}`);
+    } else {
+      setModalOpen(false);
+      onReload();
+    }
+
     setLoading(false);
-    setModalOpen(false);
-    onReload();
   };
 
   const remove = async (id: string) => {
@@ -92,14 +118,16 @@ export function CardsPage({ cards, onReload }: CardsPageProps) {
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {cards.map((c) => {
-            const available = Number(c.credit_limit) - Number(c.used_amount);
-            const usagePct = c.credit_limit > 0 ? (Number(c.used_amount) / Number(c.credit_limit)) * 100 : 0;
+          {cards.map((c: any) => {
+            const limit = Number(c.limit_amount ?? c.credit_limit ?? 0);
+            const used = Number(c.used_amount ?? 0);
+            const available = limit - used;
+            const usagePct = limit > 0 ? (used / limit) * 100 : 0;
             return (
               <div key={c.id} className="rounded-2xl border border-slate-800 bg-[#121824] p-5 transition hover:border-slate-700">
                 <div className="mb-4 flex items-start justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-14 items-center justify-center rounded-lg" style={{ background: c.color }}>
+                    <div className="flex h-10 w-14 items-center justify-center rounded-lg" style={{ background: c.color || '#6C5CE7' }}>
                       <CreditCard size={20} className="text-white" />
                     </div>
                     <div>
@@ -119,24 +147,24 @@ export function CardsPage({ cards, onReload }: CardsPageProps) {
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-slate-400">Limite total</span>
-                    <span className="font-medium text-white">{formatCurrency(Number(c.credit_limit))}</span>
+                    <span className="font-medium text-white">{formatCurrency(limit)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-400">Utilizado</span>
-                    <span className="font-medium text-red-400">{formatCurrency(Number(c.used_amount))}</span>
+                    <span className="font-medium text-red-400">{formatCurrency(used)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-400">Disponível</span>
                     <span className="font-medium text-green-400">{formatCurrency(available)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-400">Vencimento</span>
-                    <span className="font-medium text-white">Dia {c.due_day}</span>
+                    <span className="text-slate-400">Fechamento / Venc.</span>
+                    <span className="font-medium text-white">Dia {c.closing_day || '-'} / {c.due_day}</span>
                   </div>
                   <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-800">
                     <div
                       className="h-full rounded-full transition-all"
-                      style={{ width: `${Math.min(usagePct, 100)}%`, background: usagePct > 80 ? '#E17055' : c.color }}
+                      style={{ width: `${Math.min(usagePct, 100)}%`, background: usagePct > 80 ? '#E17055' : (c.color || '#6C5CE7') }}
                     />
                   </div>
                   <p className="text-xs text-slate-500">{usagePct.toFixed(0)}% do limite usado</p>
@@ -162,11 +190,14 @@ export function CardsPage({ cards, onReload }: CardsPageProps) {
               <input value={bank} onChange={(e) => setBank(e.target.value)} placeholder="Banco" className="input-field" required />
               <div className="grid grid-cols-2 gap-3">
                 <input value={lastFour} onChange={(e) => setLastFour(e.target.value)} placeholder="Últimos 4 dígitos" maxLength={4} className="input-field" />
-                <input value={dueDay} onChange={(e) => setDueDay(e.target.value)} type="number" min="1" max="31" placeholder="Dia venc." className="input-field" />
+                <input value={closingDay} onChange={(e) => setClosingDay(e.target.value)} type="number" min="1" max="31" placeholder="Dia fecho." className="input-field" required />
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <input value={creditLimit} onChange={(e) => setCreditLimit(e.target.value)} type="number" step="0.01" placeholder="Limite (R$)" className="input-field" required />
+                <input value={dueDay} onChange={(e) => setDueDay(e.target.value)} type="number" min="1" max="31" placeholder="Dia venc." className="input-field" required />
                 <input value={usedAmount} onChange={(e) => setUsedAmount(e.target.value)} type="number" step="0.01" placeholder="Usado (R$)" className="input-field" />
+              </div>
+              <div>
+                <input value={creditLimit} onChange={(e) => setCreditLimit(e.target.value)} type="number" step="0.01" placeholder="Limite Total (R$)" className="input-field" required />
               </div>
               <div className="flex items-center gap-3">
                 <label className="text-sm text-slate-300">Cor</label>

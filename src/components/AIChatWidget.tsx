@@ -58,7 +58,7 @@ export function AIChatWidget({ transactions, selectedMonth, onCreateTransaction 
     try {
       const lower = userMsg.toLowerCase();
       
-      // Simulação inteligente de resposta da IA com base nos dados reais
+      // 1. Consulta de Despesas
       if (lower.includes('gasto') || lower.includes('despesa') || lower.includes('quanto') || lower.includes('resumo')) {
         const total = transactions
           .filter(t => t.type === 'expense')
@@ -68,7 +68,9 @@ export function AIChatWidget({ transactions, selectedMonth, onCreateTransaction 
           ...prev,
           { role: 'assistant', content: `No mês selecionado (${selectedMonth}), o seu total de despesas é de ${formatCurrency(total)}.` }
         ]);
-      } else if (lower.includes('receita') || lower.includes('ganho') || lower.includes('entrada')) {
+      } 
+      // 2. Consulta de Receitas
+      else if (lower.includes('receita') || lower.includes('ganho') || lower.includes('entrada')) {
         const total = transactions
           .filter(t => t.type === 'income')
           .reduce((acc, t) => acc + Number(t.amount), 0);
@@ -77,16 +79,51 @@ export function AIChatWidget({ transactions, selectedMonth, onCreateTransaction 
           ...prev,
           { role: 'assistant', content: `No mês selecionado (${selectedMonth}), o seu total de receitas é de ${formatCurrency(total)}.` }
         ]);
-      } else {
+      } 
+      // 3. Registo Automático por Texto (ex: "gastei 100 com mercado" ou "garagem carro 100")
+      else {
+        const numberRegex = /(\d+[\d,.]*)/;
+        const match = userMsg.match(numberRegex);
+
+        if (match) {
+          const rawAmount = match[0].replace('.', '').replace(',', '.');
+          const amount = parseFloat(rawAmount);
+
+          if (!isNaN(amount) && amount > 0) {
+            const description = userMsg.replace(match[0], '').replace(/(gastei|despesa|receita|com|no|na)/gi, '').trim() || 'Lançamento via IA';
+            const type = lower.includes('receita') || lower.includes('ganho') ? 'income' : 'expense';
+
+            await onCreateTransaction({
+              description: description.charAt(0).toUpperCase() + description.slice(1),
+              amount: amount,
+              type: type,
+              category: 'Geral',
+              account: 'Conta principal',
+              transaction_date: new Date().toISOString().split('T')[0],
+              frequency: 'single',
+              installment_number: null,
+              installment_total: null,
+            });
+
+            setMessages(prev => [
+              ...prev,
+              { role: 'assistant', content: `Perfeito! Registrei "${description}" no valor de ${formatCurrency(amount)} com sucesso.` }
+            ]);
+            setLoading(false);
+            return;
+          }
+        }
+
         setMessages(prev => [
           ...prev,
-          { role: 'assistant', content: 'Entendi sua solicitação! Para registrar transações rapidamente, digite por exemplo: "gastei 50 no mercado hoje" ou consulte seus totais digitando "quanto gastei".' }
+          { role: 'assistant', content: 'Entendi sua solicitação! Para registrar transações rapidamente, digite por exemplo: "gastei 100 no mercado" ou consulte seus totais digitando "quanto gastei".' }
         ]);
       }
     } catch (err) {
+      console.error(err);
       setMessages(prev => [
         ...prev,
-        { role: 'assistant', content: 'Desculpe, ocorreu um erro ao processar sua solicitação.' }
+        { role: 'assistant', content: 'Desculpe, ocorreu um erro ao salvar o lançamento via IA. Tente novamente.' }
       ]);
     } finally {
       setLoading(false);
@@ -162,7 +199,7 @@ export function AIChatWidget({ transactions, selectedMonth, onCreateTransaction 
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Input form - Ajustado para caber perfeitamente com o celular em pé ou deitado */}
+          {/* Input form */}
           <form onSubmit={handleSend} className="border-t border-slate-800 bg-[#0B0E14] p-2.5">
             <div className="flex items-center gap-1.5">
               <button
@@ -202,3 +239,5 @@ export function AIChatWidget({ transactions, selectedMonth, onCreateTransaction 
     </div>
   );
 }
+
+export default AIChatWidget;

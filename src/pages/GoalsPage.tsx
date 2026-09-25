@@ -30,32 +30,55 @@ export function GoalsPage({ goals, onReload }: GoalsPageProps) {
     setModalOpen(true);
   };
 
-  const openEdit = (g: Goal) => {
+  const openEdit = (g: Goal & { title?: string }) => {
     setEditId(g.id);
-    setName(g.name);
+    setName(g.name || g.title || '');
     setTargetAmount(String(g.target_amount));
     setCurrentAmount(String(g.current_amount));
-    setColor(g.color);
+    setColor(g.color || '#6C5CE7');
     setModalOpen(true);
   };
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      alert('Sessão expirada. Faça login novamente.');
+      setLoading(false);
+      return;
+    }
+
+    // A base de dados exige 'title' em vez de 'name'
     const payload = {
-      name,
+      user_id: user.id,
+      title: name,
       target_amount: parseFloat(targetAmount) || 0,
       current_amount: parseFloat(currentAmount) || 0,
       color,
     };
+
+    let error = null;
+
     if (editId) {
-      await supabase.from('goals').update(payload).eq('id', editId);
+      const res = await supabase.from('goals').update(payload).eq('id', editId);
+      error = res.error;
     } else {
-      await supabase.from('goals').insert(payload);
+      const res = await supabase.from('goals').insert([payload]);
+      error = res.error;
     }
+
+    if (error) {
+      console.error('Erro ao salvar cofrinho:', error.message);
+      alert(`Erro ao salvar cofrinho: ${error.message}`);
+    } else {
+      setModalOpen(false);
+      onReload();
+    }
+
     setLoading(false);
-    setModalOpen(false);
-    onReload();
   };
 
   const remove = async (id: string) => {
@@ -69,10 +92,16 @@ export function GoalsPage({ goals, onReload }: GoalsPageProps) {
     let newVal = Number(actionGoal.current_amount);
     if (actionType === 'deposit') newVal += amt;
     else newVal = Math.max(0, newVal - amt);
-    await supabase.from('goals').update({ current_amount: newVal }).eq('id', actionGoal.id);
-    setActionGoal(null);
-    setActionAmount('');
-    onReload();
+
+    const { error } = await supabase.from('goals').update({ current_amount: newVal }).eq('id', actionGoal.id);
+
+    if (error) {
+      alert(`Erro ao atualizar valor: ${error.message}`);
+    } else {
+      setActionGoal(null);
+      setActionAmount('');
+      onReload();
+    }
   };
 
   return (
@@ -95,17 +124,18 @@ export function GoalsPage({ goals, onReload }: GoalsPageProps) {
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {goals.map((g) => {
+          {goals.map((g: any) => {
+            const goalName = g.name || g.title || 'Cofrinho';
             const pct = g.target_amount > 0 ? Math.min((Number(g.current_amount) / Number(g.target_amount)) * 100, 100) : 0;
             return (
               <div key={g.id} className="rounded-2xl border border-slate-800 bg-[#121824] p-5">
                 <div className="mb-4 flex items-start justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg" style={{ background: g.color }}>
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg" style={{ background: g.color || '#6C5CE7' }}>
                       <PiggyBank size={20} className="text-white" />
                     </div>
                     <div>
-                      <p className="font-semibold text-white">{g.name}</p>
+                      <p className="font-semibold text-white">{goalName}</p>
                       <p className="text-xs text-slate-500">{pct.toFixed(0)}% da meta</p>
                     </div>
                   </div>
@@ -119,7 +149,7 @@ export function GoalsPage({ goals, onReload }: GoalsPageProps) {
                   </div>
                 </div>
                 <div className="mb-3 h-3 overflow-hidden rounded-full bg-slate-800">
-                  <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: g.color }} />
+                  <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: g.color || '#6C5CE7' }} />
                 </div>
                 <div className="mb-4 flex justify-between text-sm">
                   <span className="text-slate-400">{formatCurrency(Number(g.current_amount))}</span>
@@ -178,7 +208,7 @@ export function GoalsPage({ goals, onReload }: GoalsPageProps) {
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setActionGoal(null)} />
           <div className="relative w-full max-w-sm animate-slide-up rounded-2xl border border-slate-800 bg-[#121824] p-6 shadow-2xl">
             <h3 className="mb-4 text-lg font-bold text-white">
-              {actionType === 'deposit' ? 'Guardar em' : 'Resgatar de'} {actionGoal.name}
+              {actionType === 'deposit' ? 'Guardar em' : 'Resgatar de'} {actionGoal.name || actionGoal.title}
             </h3>
             <input
               value={actionAmount}

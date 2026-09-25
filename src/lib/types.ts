@@ -13,6 +13,8 @@ export interface Transaction {
   frequency: Frequency;
   installment_number: number | null;
   installment_total: number | null;
+  is_paid?: boolean;
+  paid?: boolean;
   created_at: string;
 }
 
@@ -78,4 +80,6 @@ export interface NewTransaction {
   frequency: Frequency;
   installment_number?: number | null;
   installment_total?: number | null;
+  is_paid?: boolean;
+  paid?: boolean;
 }

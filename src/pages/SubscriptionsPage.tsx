@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Trash2, Edit3, X, Repeat, Power } from 'lucide-react';
+import { Plus, Trash2, Edit3, X, Repeat } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { Subscription } from '@/lib/types';
 import { formatCurrency } from '@/lib/format';
@@ -15,7 +15,7 @@ export function SubscriptionsPage({ subscriptions, onReload }: SubscriptionsPage
   const [name, setName] = useState('');
   const [category, setCategory] = useState('Streaming');
   const [amount, setAmount] = useState('');
-  const [billingDay, setBillingDay] = useState('1');
+  const [dueDay, setDueDay] = useState('1');
   const [loading, setLoading] = useState(false);
 
   const openNew = () => {
@@ -23,36 +23,59 @@ export function SubscriptionsPage({ subscriptions, onReload }: SubscriptionsPage
     setName('');
     setCategory('Streaming');
     setAmount('');
-    setBillingDay('1');
+    setDueDay('1');
     setModalOpen(true);
   };
 
-  const openEdit = (s: Subscription) => {
+  const openEdit = (s: Subscription & { title?: string; due_day?: number; billing_day?: number }) => {
     setEditId(s.id);
-    setName(s.name);
-    setCategory(s.category);
+    setName(s.name || s.title || '');
+    setCategory(s.category || 'Streaming');
     setAmount(String(s.amount));
-    setBillingDay(String(s.billing_day));
+    setDueDay(String(s.due_day || s.billing_day || 1));
     setModalOpen(true);
   };
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      alert('Sessão expirada. Faça login novamente.');
+      setLoading(false);
+      return;
+    }
+
+    // A base de dados exige 'name' e 'due_day'
     const payload = {
+      user_id: user.id,
       name,
       category,
       amount: parseFloat(amount) || 0,
-      billing_day: parseInt(billingDay) || 1,
+      due_day: parseInt(dueDay) || 1,
     };
+
+    let error = null;
+
     if (editId) {
-      await supabase.from('subscriptions').update(payload).eq('id', editId);
+      const res = await supabase.from('subscriptions').update(payload).eq('id', editId);
+      error = res.error;
     } else {
-      await supabase.from('subscriptions').insert(payload);
+      const res = await supabase.from('subscriptions').insert([payload]);
+      error = res.error;
     }
+
+    if (error) {
+      console.error('Erro ao salvar assinatura:', error.message);
+      alert(`Erro ao salvar assinatura: ${error.message}`);
+    } else {
+      setModalOpen(false);
+      onReload();
+    }
+
     setLoading(false);
-    setModalOpen(false);
-    onReload();
   };
 
   const remove = async (id: string) => {
@@ -60,19 +83,14 @@ export function SubscriptionsPage({ subscriptions, onReload }: SubscriptionsPage
     onReload();
   };
 
-  const toggleActive = async (s: Subscription) => {
-    await supabase.from('subscriptions').update({ active: !s.active }).eq('id', s.id);
-    onReload();
-  };
-
-  const totalMonthly = subscriptions.filter((s) => s.active).reduce((sum, s) => sum + Number(s.amount), 0);
+  const totalMonthly = subscriptions.reduce((sum, s) => sum + Number(s.amount), 0);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold text-white">Assinaturas & Recorrências</h2>
-          <p className="text-sm text-slate-400 mt-1">Total mensal ativo: <span className="font-semibold text-[#A29BFE]">{formatCurrency(totalMonthly)}</span></p>
+          <p className="text-sm text-slate-400 mt-1">Total mensal: <span className="font-semibold text-[#A29BFE]">{formatCurrency(totalMonthly)}</span></p>
         </div>
         <button
           onClick={openNew}
@@ -90,38 +108,39 @@ export function SubscriptionsPage({ subscriptions, onReload }: SubscriptionsPage
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
-          {subscriptions.map((s) => (
-            <div key={s.id} className={`rounded-2xl border bg-[#121824] p-5 transition ${s.active ? 'border-slate-800' : 'border-slate-800/50 opacity-60'}`}>
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#6C5CE7]/15">
-                    <Repeat size={20} className="text-[#A29BFE]" />
+          {subscriptions.map((s: any) => {
+            const subName = s.name || s.title || 'Assinatura';
+            const subDay = s.due_day || s.billing_day || 1;
+            return (
+              <div key={s.id} className="rounded-2xl border border-slate-800 bg-[#121824] p-5 transition">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#6C5CE7]/15">
+                      <Repeat size={20} className="text-[#A29BFE]" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-white">{subName}</p>
+                      <p className="text-xs text-slate-500">{s.category} · Dia {subDay}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-semibold text-white">{s.name}</p>
-                    <p className="text-xs text-slate-500">{s.category} · Dia {s.billing_day}</p>
+                  <div className="flex gap-1">
+                    <button onClick={() => openEdit(s)} className="rounded p-1.5 text-slate-400 hover:bg-[#6C5CE7]/20 hover:text-[#A29BFE]">
+                      <Edit3 size={14} />
+                    </button>
+                    <button onClick={() => remove(s.id)} className="rounded p-1.5 text-slate-400 hover:bg-red-500/20 hover:text-red-400">
+                      <Trash2 size={14} />
+                    </button>
                   </div>
                 </div>
-                <div className="flex gap-1">
-                  <button onClick={() => toggleActive(s)} className="rounded p-1.5 text-slate-400 hover:bg-[#6C5CE7]/20 hover:text-[#A29BFE]" title={s.active ? 'Pausar' : 'Ativar'}>
-                    <Power size={14} />
-                  </button>
-                  <button onClick={() => openEdit(s)} className="rounded p-1.5 text-slate-400 hover:bg-[#6C5CE7]/20 hover:text-[#A29BFE]">
-                    <Edit3 size={14} />
-                  </button>
-                  <button onClick={() => remove(s.id)} className="rounded p-1.5 text-slate-400 hover:bg-red-500/20 hover:text-red-400">
-                    <Trash2 size={14} />
-                  </button>
+                <div className="mt-3 flex items-center justify-between">
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/15 text-green-400">
+                    Ativa
+                  </span>
+                  <span className="text-lg font-bold text-white">{formatCurrency(Number(s.amount))}<span className="text-xs text-slate-500">/mês</span></span>
                 </div>
               </div>
-              <div className="mt-3 flex items-center justify-between">
-                <span className={`text-xs px-2 py-0.5 rounded-full ${s.active ? 'bg-green-500/15 text-green-400' : 'bg-slate-700 text-slate-400'}`}>
-                  {s.active ? 'Ativa' : 'Pausada'}
-                </span>
-                <span className="text-lg font-bold text-white">{formatCurrency(Number(s.amount))}<span className="text-xs text-slate-500">/mês</span></span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -140,7 +159,7 @@ export function SubscriptionsPage({ subscriptions, onReload }: SubscriptionsPage
               <input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Categoria" className="input-field" />
               <div className="grid grid-cols-2 gap-3">
                 <input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" step="0.01" placeholder="Valor (R$)" className="input-field" required />
-                <input value={billingDay} onChange={(e) => setBillingDay(e.target.value)} type="number" min="1" max="31" placeholder="Dia cobrança" className="input-field" />
+                <input value={dueDay} onChange={(e) => setDueDay(e.target.value)} type="number" min="1" max="31" placeholder="Dia cobrança" className="input-field" />
               </div>
               <button type="submit" disabled={loading} className="w-full rounded-lg bg-gradient-to-r from-[#6C5CE7] to-[#5A4BD1] py-3 font-semibold text-white disabled:opacity-50">
                 {loading ? 'Salvando...' : 'Salvar'}
