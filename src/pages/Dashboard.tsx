@@ -84,12 +84,21 @@ export function Dashboard() {
     await deleteTransaction(id, deleteAllFuture);
   };
 
-  // CORRIGIDO: Função real que altera o status no banco de dados e recarrega os dados
+  // CORRIGIDO: Alterna o status no banco considerando variações de nome e força recarga imediata
   const handleTogglePaid = async (tx: Transaction) => {
-    const currentPaid = (tx as any).is_paid === true;
+    const currentPaid = (tx as any).is_paid === true || (tx as any).paid === true;
     const newStatus = !currentPaid;
-    await updateTransaction(tx.id, { is_paid: newStatus } as any);
-    await loadData(); // Garante que a tela recarrega atualizada
+
+    const { error } = await updateTransaction(tx.id, {
+      is_paid: newStatus,
+      paid: newStatus,
+    } as any);
+
+    if (error) {
+      console.error('Erro ao atualizar status de pagamento:', error);
+    } else {
+      await loadData();
+    }
   };
 
   if (!isApproved && !isAdmin) {
