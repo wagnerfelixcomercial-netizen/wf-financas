@@ -80,18 +80,18 @@ export function Dashboard() {
     return await createTransaction(tx);
   };
 
-  // Função de exclusão otimizada para lote / futuros
   const handleDeleteTx = async (id: string, deleteAllFuture?: boolean) => {
     await deleteTransaction(id, deleteAllFuture);
   };
 
-  // Função para marcar como pago ou pendente num clique
+  // CORRIGIDO: Função real que altera o status no banco de dados e recarrega os dados
   const handleTogglePaid = async (tx: Transaction) => {
-    const currentPaid = (tx as any).is_paid !== false;
-    await updateTransaction(tx.id, { is_paid: !currentPaid } as any);
+    const currentPaid = (tx as any).is_paid === true;
+    const newStatus = !currentPaid;
+    await updateTransaction(tx.id, { is_paid: newStatus } as any);
+    await loadData(); // Garante que a tela recarrega atualizada
   };
 
-  // Pending approval screen
   if (!isApproved && !isAdmin) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#0B0E14] p-6">
@@ -102,7 +102,6 @@ export function Dashboard() {
           <h1 className="mb-3 text-2xl font-bold text-white">Conta em análise</h1>
           <p className="mb-6 text-slate-400">
             Olá {profile?.full_name || 'usuário'}! Sua conta foi criada com sucesso e está aguardando aprovação do administrador.
-            Você receberá acesso em breve.
           </p>
           <button
             onClick={signOut}
@@ -117,12 +116,10 @@ export function Dashboard() {
 
   return (
     <div className="min-h-screen bg-[#0B0E14]">
-      {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div className="fixed inset-0 z-40 bg-black/60 lg:hidden" onClick={() => setSidebarOpen(false)} />
       )}
 
-      {/* Sidebar */}
       <aside className={`fixed left-0 top-0 z-50 h-full w-64 transform border-r border-slate-800 bg-[#121824] transition-transform lg:translate-x-0 ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full'
       }`}>
@@ -177,15 +174,12 @@ export function Dashboard() {
         </div>
       </aside>
 
-      {/* Main content */}
       <div className="lg:ml-64">
-        {/* Top bar */}
         <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-800 glass px-4 sm:px-6">
           <div className="flex items-center gap-3">
             <button onClick={() => setSidebarOpen(true)} className="text-slate-400 lg:hidden">
               <Menu size={22} />
             </button>
-            {/* Month selector */}
             <div className="flex items-center gap-2 rounded-lg border border-slate-700 bg-[#121824] px-3 py-2">
               <button onClick={handlePrevMonth} className="text-slate-400 hover:text-white">
                 <ChevronLeft size={18} />
@@ -209,7 +203,6 @@ export function Dashboard() {
           </button>
         </header>
 
-        {/* Page content */}
         <main className="p-4 sm:p-6 lg:p-8 animate-fade-in">
           {loading && activeTab === 'overview' ? (
             <div className="flex h-64 items-center justify-center">
@@ -244,7 +237,6 @@ export function Dashboard() {
         </main>
       </div>
 
-      {/* New transaction modal */}
       <NewTransactionModal
         open={txModalOpen}
         onClose={() => {
@@ -267,7 +259,6 @@ export function Dashboard() {
         } : null}
       />
 
-      {/* AI Chat Widget */}
       <AIChatWidget
         transactions={transactions}
         selectedMonth={selectedMonth}
