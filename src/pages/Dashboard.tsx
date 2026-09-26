@@ -94,6 +94,14 @@ export function Dashboard() {
   };
 
   const handleDeleteWithFuture = async (id: string, deleteAllFuture?: boolean) => {
+    const txToDelete = transactions.find((t) => t.id === id);
+    if (!txToDelete) {
+      if (confirm('Excluir este lançamento?')) {
+        await deleteTransaction(id);
+      }
+      return;
+    }
+
     if (!deleteAllFuture) {
       if (confirm('Excluir este lançamento?')) {
         await deleteTransaction(id);
@@ -101,14 +109,12 @@ export function Dashboard() {
       return;
     }
 
-    const txToDelete = transactions.find((t) => t.id === id);
-    if (!txToDelete) {
-      await deleteTransaction(id);
-      return;
-    }
-
     if (confirm('Deseja realmente excluir este e todos os lançamentos futuros/restantes relacionados?')) {
-      const cleanDescription = txToDelete.description.replace(/ \(\d+\/\d+\)$/, '').trim();
+      const cleanDescription = txToDelete.description
+        .replace(/ \(\d+\/\d+\)$/, '')
+        .replace(/ \d{2}\/\d{2}\/\d{4}$/, '')
+        .trim();
+
       const { error } = await supabase
         .from('transactions')
         .delete()
@@ -119,7 +125,8 @@ export function Dashboard() {
       if (!error) {
         loadData();
       } else {
-        alert('Erro ao excluir lançamentos futuros.');
+        console.error('Erro ao excluir lançamentos futuros:', error.message);
+        alert('Erro ao excluir lançamentos futuros: ' + error.message);
       }
     }
   };
@@ -262,7 +269,6 @@ export function Dashboard() {
               {activeTab === 'transactions' && (
                 <TransactionsList transactions={transactions} onEdit={openEditTx} onDelete={handleDeleteTx} />
               )}
-              {/* Passando as transações e o reload para os cartões */}
               {activeTab === 'cards' && <CardsPage cards={cards} transactions={transactions} onReload={loadData} />}
               {activeTab === 'goals' && <GoalsPage goals={goals} onReload={loadData} />}
               {activeTab === 'subscriptions' && <SubscriptionsPage subscriptions={subscriptions} onReload={loadData} />}
@@ -295,7 +301,7 @@ export function Dashboard() {
         } : null}
       />
 
-      {/* AI Chat Widget com onReload incluído */}
+      {/* AI Chat Widget */}
       <AIChatWidget
         transactions={transactions}
         selectedMonth={selectedMonth}
