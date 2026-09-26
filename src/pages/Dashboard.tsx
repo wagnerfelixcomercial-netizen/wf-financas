@@ -110,16 +110,20 @@ export function Dashboard() {
     }
 
     if (confirm('Deseja realmente excluir este e todos os lançamentos futuros/restantes relacionados?')) {
+      // Limpeza robusta da descrição para remover parcelas ou sufixos comuns
       const cleanDescription = txToDelete.description
-        .replace(/ \(\d+\/\d+\)$/, '')
-        .replace(/ \d{2}\/\d{2}\/\d{4}$/, '')
+        .replace(/\s*\(\d+\/\d+\)\s*/g, '')
+        .replace(/\s*\d{2}\/\d{2}\/\d{4}\s*/g, '')
         .trim();
 
+      console.log('A apagar futuros com descrição base:', cleanDescription);
+
+      // Usamos textSearch ou ilike abrangente para apagar todos os registos correspondentes do utilizador a partir da data
       const { error } = await supabase
         .from('transactions')
         .delete()
         .eq('user_id', user?.id)
-        .ilike('description', `${cleanDescription}%`)
+        .ilike('description', `%${cleanDescription}%`)
         .gte('transaction_date', txToDelete.transaction_date);
 
       if (!error) {
