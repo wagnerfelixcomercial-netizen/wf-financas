@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Calendar, DollarSign, Tag, CreditCard, Repeat, Split, CheckCircle } from 'lucide-react';
-import type { TransactionType, Frequency } from '@/lib/types';
+import type { TransactionType, Frequency, Category, CreditCard as CreditCardType } from '@/lib/types';
 import { toISODate } from '@/lib/format';
-import type { Category } from '@/lib/types';
 
 interface NewTransactionModalProps {
   open: boolean;
@@ -19,6 +18,7 @@ interface NewTransactionModalProps {
     installment_total: number | null;
   }) => Promise<boolean>;
   categories: Category[];
+  cards?: CreditCardType[]; // Lista de cartões cadastrados
   editData?: {
     id: string;
     description: string;
@@ -33,7 +33,7 @@ interface NewTransactionModalProps {
   } | null;
 }
 
-export function NewTransactionModal({ open, onClose, onSave, categories, editData }: NewTransactionModalProps) {
+export function NewTransactionModal({ open, onClose, onSave, categories, cards = [], editData }: NewTransactionModalProps) {
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [type, setType] = useState<TransactionType>('expense');
@@ -58,10 +58,8 @@ export function NewTransactionModal({ open, onClose, onSave, categories, editDat
         setDate(editData.transaction_date || toISODate(new Date()));
         setFrequency(editData.frequency || 'single');
         setInstallmentTotal(editData.installment_total ? String(editData.installment_total) : '1');
-        // Preserva o número atual da parcela (ex: 2 de 10) para não resetar ao editar
         setCurrentInstallmentNumber(editData.installment_number || null);
       } else {
-        // Limpa os campos quando for um novo lançamento
         setDescription('');
         setAmount('');
         setType('expense');
@@ -89,7 +87,6 @@ export function NewTransactionModal({ open, onClose, onSave, categories, editDat
 
     setLoading(true);
     
-    // Se for edição, mantém o installment_number original (ex: 2). Se for novo, começa em 1.
     const finalInstallmentNumber = editData 
       ? currentInstallmentNumber 
       : (frequency === 'installment' ? 1 : null);
@@ -115,6 +112,14 @@ export function NewTransactionModal({ open, onClose, onSave, categories, editDat
 
   const defaultCats = ['Outros', 'Moradia', 'Alimentação', 'Transporte', 'Saúde', 'Lazer', 'Educação', 'Salário', 'Investimentos'];
   const catNames = [...defaultCats, ...categories.map((c) => c.name)].filter((v, i, a) => a.indexOf(v) === i);
+
+  // Opções de contas e cartões disponíveis para seleção
+  const availableAccounts = [
+    'Conta principal',
+    'Dinheiro',
+    'Conta Corrente',
+    ...cards.map((card) => card.name) // Puxa os nomes dos cartões cadastrados (ex: "Nu credito")
+  ].filter((v, i, a) => a.indexOf(v) === i);
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -199,13 +204,11 @@ export function NewTransactionModal({ open, onClose, onSave, categories, editDat
               </select>
             </Field>
             <Field icon={<CreditCard size={16} />} label="Conta / Cartão">
-              <input
-                type="text"
-                value={account}
-                onChange={(e) => setAccount(e.target.value)}
-                placeholder="Ex: Itaú, Nubank..."
-                className="input-field"
-              />
+              <select value={account} onChange={(e) => setAccount(e.target.value)} className="input-field">
+                {availableAccounts.map((acc) => (
+                  <option key={acc} value={acc}>{acc}</option>
+                ))}
+              </select>
             </Field>
           </div>
 

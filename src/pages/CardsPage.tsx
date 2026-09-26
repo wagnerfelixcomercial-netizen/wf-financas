@@ -1,15 +1,16 @@
 import { useState } from 'react';
 import { CreditCard, Plus, Trash2, Edit3, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import type { Card } from '@/lib/types';
+import type { Card, Transaction } from '@/lib/types';
 import { formatCurrency } from '@/lib/format';
 
 interface CardsPageProps {
   cards: Card[];
+  transactions?: Transaction[];
   onReload: () => void;
 }
 
-export function CardsPage({ cards, onReload }: CardsPageProps) {
+export function CardsPage({ cards, transactions = [], onReload }: CardsPageProps) {
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [name, setName] = useState('');
@@ -18,7 +19,7 @@ export function CardsPage({ cards, onReload }: CardsPageProps) {
   const [creditLimit, setCreditLimit] = useState('');
   const [usedAmount, setUsedAmount] = useState('');
   const [dueDay, setDueDay] = useState('10');
-  const [closingDay, setClosingDay] = useState('5'); // <-- Novo campo para o dia de fecho
+  const [closingDay, setClosingDay] = useState('5');
   const [color, setColor] = useState('#6C5CE7');
   const [loading, setLoading] = useState(false);
 
@@ -68,7 +69,7 @@ export function CardsPage({ cards, onReload }: CardsPageProps) {
       limit_amount: parseFloat(creditLimit) || 0,
       used_amount: parseFloat(usedAmount) || 0,
       due_day: parseInt(dueDay) || 10,
-      closing_day: parseInt(closingDay) || 5, // <-- Adicionado ao payload
+      closing_day: parseInt(closingDay) || 5,
       color,
     };
 
@@ -120,9 +121,29 @@ export function CardsPage({ cards, onReload }: CardsPageProps) {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {cards.map((c: any) => {
             const limit = Number(c.limit_amount ?? c.credit_limit ?? 0);
-            const used = Number(c.used_amount ?? 0);
+            
+            // CORREÇÃO INTELIGENTE: Verifica se a conta da transação contém o nome do cartão ou do banco
+            const cardName = (c.name || '').toLowerCase().trim();
+            const cardBank = (c.bank || '').toLowerCase().trim();
+
+            const calculatedUsed = transactions
+              .filter((t) => {
+                if (t.type !== 'expense') return false;
+                const acc = (t.account || '').toLowerCase().trim();
+                return (
+                  acc === cardName ||
+                  acc.includes(cardName) ||
+                  (cardBank && acc.includes(cardBank))
+                );
+              })
+              .reduce((acc, t) => acc + Number(t.amount), 0);
+
+            const manualUsed = Number(c.used_amount ?? 0);
+            const used = calculatedUsed > 0 ? calculatedUsed : manualUsed;
+            
             const available = limit - used;
             const usagePct = limit > 0 ? (used / limit) * 100 : 0;
+
             return (
               <div key={c.id} className="rounded-2xl border border-slate-800 bg-[#121824] p-5 transition hover:border-slate-700">
                 <div className="mb-4 flex items-start justify-between">
@@ -194,7 +215,7 @@ export function CardsPage({ cards, onReload }: CardsPageProps) {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <input value={dueDay} onChange={(e) => setDueDay(e.target.value)} type="number" min="1" max="31" placeholder="Dia venc." className="input-field" required />
-                <input value={usedAmount} onChange={(e) => setUsedAmount(e.target.value)} type="number" step="0.01" placeholder="Usado (R$)" className="input-field" />
+                <input value={usedAmount} onChange={(e) => setUsedAmount(e.target.value)} type="number" step="0.01" placeholder="Usado (R$) (Opcional)" className="input-field" />
               </div>
               <div>
                 <input value={creditLimit} onChange={(e) => setCreditLimit(e.target.value)} type="number" step="0.01" placeholder="Limite Total (R$)" className="input-field" required />

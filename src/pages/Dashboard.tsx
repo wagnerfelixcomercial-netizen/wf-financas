@@ -108,7 +108,7 @@ export function Dashboard() {
     }
 
     if (confirm('Deseja realmente excluir este e todos os lançamentos futuros/restantes relacionados?')) {
-      const cleanDescription = txToDelete.description.replace(/ \(\d+\/\d+\)$/, '');
+      const cleanDescription = txToDelete.description.replace(/ \(\d+\/\d+\)$/, '').trim();
       const { error } = await supabase
         .from('transactions')
         .delete()
@@ -118,6 +118,8 @@ export function Dashboard() {
 
       if (!error) {
         loadData();
+      } else {
+        alert('Erro ao excluir lançamentos futuros.');
       }
     }
   };
@@ -260,7 +262,8 @@ export function Dashboard() {
               {activeTab === 'transactions' && (
                 <TransactionsList transactions={transactions} onEdit={openEditTx} onDelete={handleDeleteTx} />
               )}
-              {activeTab === 'cards' && <CardsPage cards={cards} onReload={loadData} />}
+              {/* Passando as transações e o reload para os cartões */}
+              {activeTab === 'cards' && <CardsPage cards={cards} transactions={transactions} onReload={loadData} />}
               {activeTab === 'goals' && <GoalsPage goals={goals} onReload={loadData} />}
               {activeTab === 'subscriptions' && <SubscriptionsPage subscriptions={subscriptions} onReload={loadData} />}
               {activeTab === 'reports' && <ReportsPage />}
@@ -277,6 +280,7 @@ export function Dashboard() {
         onClose={() => setTxModalOpen(false)}
         onSave={handleSaveTx}
         categories={categories as Category[]}
+        cards={cards}
         editData={editTx ? {
           id: editTx.id,
           description: editTx.description,
@@ -291,13 +295,14 @@ export function Dashboard() {
         } : null}
       />
 
-      {/* AI Chat Widget */}
+      {/* AI Chat Widget com onReload incluído */}
       <AIChatWidget
         transactions={transactions}
         selectedMonth={selectedMonth}
         onCreateTransaction={async (tx) => {
           return await createTransaction(tx);
         }}
+        onReload={loadData}
       />
     </div>
   );
